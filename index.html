@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>SpendRule Concept · Gaurav Basantani</title>
+<meta name="description" content="Pay only what the contract says: trace each vendor invoice line to the contract clause, approve, dispute or hold each flagged line, and release only clean lines to payment. An unofficial concept by Gaurav Basantani.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Inter+Tight:wght@600;700;800&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: the product screen is the page. One invoice review window (steps | main step | "Ready to pay" panel), a story strip above, one proof strip below. */
+:root{
+  --bg:#eff3f1; --window:#ffffff; --panel:#f5f8f6; --ink:#111a16; --muted:#55625b; --line:#dde5e1;
+  --accent:#0f6b55; --accent-ink:#ffffff; --accent-soft:#e0f1eb;
+  --ok:#2b7a3d; --ok-soft:#e2f2e5; --warn:#8a5a00; --warn-soft:#fdf0d5; --bad:#b42318; --bad-soft:#fde7e4; --off:#a3ada8;
+  --shadow:0 1px 2px rgba(17,26,22,.05),0 14px 34px rgba(17,26,22,.09);
+  --sans:"Inter",system-ui,-apple-system,sans-serif; --display:"Inter Tight","Inter",system-ui,sans-serif; --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0b110e; --window:#141b18; --panel:#0f1512; --ink:#e6eeea; --muted:#9caaa3; --line:#26322c;
+  --accent:#5fd3b3; --accent-ink:#04201a; --accent-soft:#143029;
+  --ok:#86d99a; --ok-soft:#15301c; --warn:#f2c46b; --warn-soft:#382c11; --bad:#ff9a8f; --bad-soft:#3a1714; --off:#56625c;
+  --shadow:none; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0b110e; --window:#141b18; --panel:#0f1512; --ink:#e6eeea; --muted:#9caaa3; --line:#26322c;
+  --accent:#5fd3b3; --accent-ink:#04201a; --accent-soft:#143029;
+  --ok:#86d99a; --ok-soft:#15301c; --warn:#f2c46b; --warn-soft:#382c11; --bad:#ff9a8f; --bad-soft:#3a1714; --off:#56625c;
+  --shadow:none; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:15px/1.45 var(--sans);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:28px 56px}
+.wrap{max-width:1120px;margin:0 auto;display:grid;gap:22px}
+p,h1,h2,h3{margin:0}
+.head{display:flex;justify-content:space-between;align-items:end;gap:16px;flex-wrap:wrap}
+.eyebrow{font:500 .72rem var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--accent)}
+h1{font:800 clamp(1.6rem,3.4vw,2.3rem)/1.08 var(--display);letter-spacing:-.025em;margin-top:6px;text-wrap:balance}
+.sub{color:var(--muted);margin-top:6px;font-size:1rem;max-width:64ch}
+.by{font:500 .78rem var(--mono);color:var(--muted);text-align:right}
+.by a{color:var(--ink);text-decoration:none;border-bottom:1px solid var(--line)}
+@media(max-width:600px){.by{text-align:left}}
+/* story strip */
+.story{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));background:var(--window);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+@media(max-width:760px){.story{grid-template-columns:1fr}}
+.beat{padding:16px 18px;display:grid;gap:6px;align-content:start}
+.beat+.beat{border-left:1px solid var(--line)}
+@media(max-width:760px){.beat+.beat{border-left:0;border-top:1px solid var(--line)}}
+.beat .k{display:flex;align-items:center;gap:8px;font:600 .72rem var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.beat .k i{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-size:.72rem;background:var(--panel);border:1px solid var(--line);color:var(--ink)}
+.beat.p .k{color:var(--warn)}.beat.p .k i{background:var(--warn-soft);border-color:transparent;color:var(--warn)}
+.beat.i .k{color:var(--accent)}.beat.i .k i{background:var(--accent-soft);border-color:transparent;color:var(--accent)}
+.beat.r .k{color:var(--ok)}.beat.r .k i{background:var(--ok-soft);border-color:transparent;color:var(--ok)}
+.beat p{font-size:.95rem;line-height:1.45}
+@media(max-width:620px){.beat{padding:12px 14px;gap:4px}.beat p{font-size:.88rem}}
+/* narrator */
+.guide{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 18px;background:var(--accent-soft);border-bottom:1px solid var(--line)}
+.guide.bad{background:var(--bad-soft)}
+.guide.bad .tag{color:var(--bad)}
+@media(max-width:620px){.guide{grid-template-columns:1fr;gap:8px}}
+.guide .tag{font:600 .66rem var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--accent);background:var(--window);border-radius:6px;padding:4px 7px;justify-self:start}
+.guide p{font-size:.9rem;line-height:1.4}
+.guide p b{font-weight:600}
+.guide p span{color:var(--muted)}
+.guide .btn{min-height:34px;padding:6px 12px;font-size:.82rem;white-space:nowrap;justify-self:start}
+/* window */
+.window{background:var(--window);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);overflow:hidden}
+.bar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 18px;border-bottom:1px solid var(--line)}
+.org{display:flex;align-items:center;gap:10px;font-size:.88rem;color:var(--muted);min-width:0}
+.org b{color:var(--ink);font-weight:600}
+.logo{width:28px;height:28px;border-radius:8px;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;font:700 .8rem var(--display);flex:none}
+.steps{display:flex;gap:4px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:3px;max-width:100%}
+.steps button{font:600 .8rem var(--sans);border:0;background:transparent;color:var(--muted);border-radius:7px;padding:6px 12px;cursor:pointer;min-height:32px;display:flex;gap:6px;align-items:center;white-space:nowrap}
+.steps button[aria-current="step"]{background:var(--window);color:var(--ink);box-shadow:0 0 0 1px var(--line)}
+.steps .tick{color:var(--ok)}
+@media(max-width:560px){.steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}.steps button{white-space:normal;justify-content:center;text-align:center;padding:6px;font-size:.76rem;line-height:1.2}}
+.cols{display:grid;grid-template-columns:minmax(0,1fr) 270px}
+@media(max-width:860px){.cols{grid-template-columns:1fr}.side{border-left:0!important;border-top:1px solid var(--line)}}
+.main{padding:22px;display:grid;gap:16px;align-content:start;min-width:0;min-height:540px}
+@media(max-width:860px){.main{min-height:0}}
+@media(max-width:420px){.main{padding:16px}}
+.title{display:flex;justify-content:space-between;align-items:start;gap:12px;flex-wrap:wrap}
+.title h2{font:700 1.35rem/1.2 var(--display);letter-spacing:-.01em}
+.title p{color:var(--muted);font-size:.9rem;margin-top:3px}
+.pill{font:600 .74rem var(--sans);padding:5px 10px;border-radius:999px;white-space:nowrap;display:inline-block}
+.pill.warn{background:var(--warn-soft);color:var(--warn)}.pill.ok{background:var(--ok-soft);color:var(--ok)}.pill.info{background:var(--accent-soft);color:var(--accent)}.pill.bad{background:var(--bad-soft);color:var(--bad)}.pill.off{background:var(--panel);color:var(--muted);box-shadow:inset 0 0 0 1px var(--line)}
+.btns{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.btn{font:600 .88rem var(--sans);border-radius:9px;padding:9px 16px;cursor:pointer;border:1px solid var(--line);background:var(--window);color:var(--ink);min-height:40px}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.ghost{border-color:transparent;color:var(--muted)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn:focus-visible,.steps button:focus-visible,.seg button:focus-visible,.row:focus-visible,.ftab:focus-visible,.dec:focus-visible,.linkbtn:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.more{font-size:.8rem;color:var(--muted)}
+.mono{font-family:var(--mono);font-size:.82rem}
+.num{font-variant-numeric:tabular-nums}
+.cap{font:500 .68rem var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.seg{display:inline-flex;background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:3px;gap:3px;max-width:100%;justify-self:start}
+.seg button{font:600 .8rem var(--sans);border:0;background:transparent;color:var(--muted);border-radius:6px;padding:6px 11px;cursor:pointer;min-height:32px}
+.seg button[aria-pressed="true"]{background:var(--window);color:var(--ink);box-shadow:0 0 0 1px var(--line)}
+/* step 1: lines */
+.lines{border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.row{display:grid;grid-template-columns:28px minmax(0,1fr) auto auto;gap:4px 12px;align-items:center;width:100%;text-align:left;font:inherit;color:inherit;background:var(--window);border:0;border-top:1px solid var(--line);padding:11px 14px;cursor:pointer}
+.row:first-child{border-top:0}
+.row[aria-current="true"]{background:var(--accent-soft);box-shadow:inset 3px 0 0 var(--accent)}
+.row .ln{font:500 .76rem var(--mono);color:var(--muted)}
+.row .it{min-width:0}
+.row .it b{display:block;font-weight:600;font-size:.92rem}
+.row .it small{display:block;color:var(--muted);font-size:.8rem}
+.row .amt{font:600 .9rem var(--sans);font-variant-numeric:tabular-nums;text-align:right}
+@media(max-width:520px){.row{grid-template-columns:24px minmax(0,1fr) auto}.row .st{grid-column:2;grid-row:2;justify-self:start}.row .amt{grid-column:3;grid-row:1}}
+.foot{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:10px 14px;border-top:1px solid var(--line);background:var(--panel);font-size:.86rem}
+.foot b{font-variant-numeric:tabular-nums}
+.peek{border-radius:12px;padding:14px 16px;display:grid;gap:10px;background:var(--bad-soft)}
+.peek.warn{background:var(--warn-soft)}
+.peek.ok{background:var(--ok-soft)}
+.peek h3{font:700 1.02rem/1.3 var(--display)}
+.peek p{font-size:.9rem}
+.vs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.vs div{background:var(--window);border-radius:10px;padding:9px 11px;display:grid;gap:2px;min-width:0}
+.vs span{font-size:.74rem;color:var(--muted)}
+.vs strong{font:700 1.05rem/1.2 var(--display);font-variant-numeric:tabular-nums}
+.vs .over strong{color:var(--bad)}
+@media(max-width:420px){.vs{grid-template-columns:1fr}.vs div{grid-template-columns:minmax(0,1fr) auto;align-items:baseline}}
+/* step 2: trace */
+.ftabs{display:flex;gap:6px;flex-wrap:wrap}
+.ftab{font:600 .8rem var(--sans);border:1px solid var(--line);background:var(--window);color:var(--ink);border-radius:999px;padding:6px 12px;cursor:pointer;min-height:32px;display:inline-flex;gap:6px;align-items:center}
+.ftab[aria-current="true"]{background:var(--ink);color:var(--window);border-color:var(--ink)}
+.ftab i{width:8px;height:8px;border-radius:50%;background:var(--bad);flex:none}
+.ftab i.ok{background:var(--ok)}.ftab i.warn{background:var(--warn)}
+.chain{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+@media(max-width:700px){.chain{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.link{border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:grid;gap:3px;min-width:0;align-content:start}
+.link .cap{display:flex;justify-content:space-between;gap:6px}
+.link strong{font:600 .92rem var(--sans);font-variant-numeric:tabular-nums}
+.link small{font-size:.78rem;color:var(--muted)}
+.link.bad{border-color:var(--bad);background:var(--bad-soft)}
+.link.warn{border-color:var(--warn);background:var(--warn-soft)}
+.link .m{font-style:normal;font-weight:700}
+.link .m.y{color:var(--ok)}.link .m.n{color:var(--bad)}
+.clause{border-left:3px solid var(--accent);background:var(--panel);border-radius:0 10px 10px 0;padding:12px 14px;display:grid;gap:6px}
+.clause q{font-size:.98rem;line-height:1.55;quotes:"\201C" "\201D"}
+.clause q mark{background:var(--accent-soft);color:var(--ink);border-radius:4px;padding:1px 3px}
+.clause.none{border-left-color:var(--warn)}
+.math{font:500 .88rem var(--mono);font-variant-numeric:tabular-nums;overflow-wrap:break-word}
+.math span,.eq span{white-space:nowrap}
+.math b{color:var(--bad)}
+.ask h3{font:700 1.05rem/1.3 var(--display)}
+.decs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:8px}
+@media(max-width:620px){.decs{grid-template-columns:1fr}}
+.dec{font:inherit;color:inherit;text-align:left;border:1px solid var(--line);background:var(--window);border-radius:10px;padding:10px 12px;cursor:pointer;display:grid;gap:2px}
+.dec b{font-weight:600;font-size:.92rem}
+.dec small{color:var(--muted);font-size:.78rem}
+.dec[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft);box-shadow:inset 0 0 0 1px var(--accent)}
+.dec.wrongpick[aria-pressed="true"]{border-color:var(--bad);background:var(--bad-soft);box-shadow:inset 0 0 0 1px var(--bad)}
+.dec:disabled{opacity:.5;cursor:not-allowed}
+.wrong{font-size:.86rem;color:var(--bad);font-weight:500}
+/* step 3: release */
+.split{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+.split div.und{border-style:dashed;border-color:var(--bad)}
+@media(max-width:620px){.split{grid-template-columns:1fr}}
+.split div{border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:grid;gap:3px;min-width:0}
+.split div.pay{border-color:var(--ok);background:var(--ok-soft)}
+.split strong{font:800 1.3rem/1.1 var(--display);font-variant-numeric:tabular-nums}
+.split span{font-size:.78rem;color:var(--muted)}
+.eq{font:500 .84rem var(--mono);font-variant-numeric:tabular-nums;color:var(--muted);overflow-wrap:break-word}
+.eq b{color:var(--ink)}
+.note{border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.note .nh{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;padding:10px 14px;background:var(--panel);border-bottom:1px solid var(--line)}
+.note .nb{padding:14px;display:grid;gap:8px;font-size:.9rem}
+.note ul{margin:0;padding-left:18px;display:grid;gap:6px}
+.empty{border:1px dashed var(--line);border-radius:12px;padding:16px;color:var(--muted);font-size:.9rem}
+.res{border:1px solid var(--ok);background:var(--ok-soft);border-radius:12px;padding:16px;display:grid;gap:8px}
+.res h3{font:700 1.15rem var(--display);color:var(--ok)}
+.res p{font-size:.9rem}
+.block{border:1px solid var(--bad);background:var(--bad-soft);border-radius:12px;padding:12px 14px;font-size:.9rem;display:grid;gap:6px}
+.linkbtn{font:600 .9rem var(--sans);border:0;background:none;color:var(--accent);padding:0;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+/* side */
+.side{background:var(--panel);border-left:1px solid var(--line);padding:20px;display:grid;gap:12px;align-content:start}
+.score{display:flex;align-items:baseline;gap:6px}
+.score strong{font:800 2rem/1 var(--display);font-variant-numeric:tabular-nums}
+.score span{color:var(--muted);font-size:.86rem}
+.meter{height:6px;border-radius:999px;background:var(--line);overflow:hidden}
+.meter i{display:block;height:100%;background:var(--ok);transition:width .3s}
+.checks{display:grid}
+.checks div{display:grid;grid-template-columns:10px minmax(0,1fr);gap:10px;padding:9px 0;border-top:1px solid var(--line);font-size:.86rem}
+.checks div:first-child{border-top:0}
+.checks i{width:9px;height:9px;border-radius:50%;margin-top:5px;background:var(--off)}
+.checks i.ok{background:var(--ok)}.checks i.warn{background:var(--warn)}.checks i.bad{background:var(--bad)}
+.checks b{display:block;font-weight:600}.checks span span{color:var(--muted)}
+.hint{font-size:.8rem;color:var(--muted)}
+/* proof */
+.proof{background:var(--window);border:1px solid var(--line);border-radius:14px;padding:16px 18px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.5fr);gap:18px;align-items:center}
+@media(max-width:720px){.proof{grid-template-columns:1fr}}
+.proof b{font-size:.98rem}.proof p{color:var(--muted);font-size:.88rem;margin-top:3px}
+.proof a{color:var(--accent)}
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px}
+.stat strong{display:block;font:800 1.3rem/1 var(--display);font-variant-numeric:tabular-nums}
+.stat span{font-size:.74rem;color:var(--muted);line-height:1.25;display:block;margin-top:4px}
+@media(max-width:480px){.stats{grid-template-columns:1fr}.stat{display:grid;grid-template-columns:84px minmax(0,1fr);gap:10px;align-items:center}.stat span{margin-top:0}}
+footer{color:var(--muted);font-size:.76rem}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
+@media(prefers-reduced-motion:no-preference){.main>*{animation:in .2s ease-out both}@keyframes in{from{transform:translateY(4px)}to{transform:none}}}
+@media(prefers-reduced-motion:reduce){.meter i{transition:none}}
+</style>
+<style>body{margin:0}</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="head">
+    <div>
+      <div class="eyebrow">Design concept · Invoice review</div>
+      <h1>Pay only what the contract says</h1>
+      <p class="sub">An invoice review for health-system AP teams, built on SpendRule's idea: check every invoice line against the contract before payment.</p>
+    </div>
+    <div class="by">Gaurav Basantani<br><a href="https://gauravbasantani.com">gauravbasantani.com</a></div>
+  </header>
+
+  <section class="story" aria-label="The story">
+    <div class="beat p"><span class="k"><i>1</i>The problem</span><p>Health-system AP teams pay thousands of vendor invoice lines, and a wrong rate or a missing discount looks fine on an invoice.</p></div>
+    <div class="beat i"><span class="k"><i>2</i>The idea</span><p>Trace each invoice line to the contract, so the reviewer sees the clause right beside the price.</p></div>
+    <div class="beat r"><span class="k"><i>3</i>What changes</span><p>The reviewer approves, disputes or holds each flagged line, and only clean lines go to payment.</p></div>
+  </section>
+
+  <section class="window" aria-label="Invoice review screen concept">
+    <div class="bar">
+      <span class="org"><span class="logo" aria-hidden="true">C</span><span><b>Clauseline</b> · Mesa Ridge Health · Halvern Medical Supply · Invoice HMS-77105</span></span>
+      <nav class="steps" aria-label="Steps">
+        <button type="button" data-go="1" id="s1"></button>
+        <button type="button" data-go="2" id="s2"></button>
+        <button type="button" data-go="3" id="s3"></button>
+      </nav>
+    </div>
+    <div class="guide" id="guide"></div>
+    <div class="cols">
+      <div class="main" id="main" aria-live="polite"></div>
+      <aside class="side" aria-label="Ready to pay">
+        <span class="cap">Ready to pay</span>
+        <div class="score"><strong id="cnt">0</strong><span>of 4 done</span></div>
+        <div class="meter"><i id="bar"></i></div>
+        <div class="checks" id="checks"></div>
+      </aside>
+    </div>
+  </section>
+
+  <section class="proof" aria-label="Where this comes from">
+    <div>
+      <b>I design ways for people to check numbers before they act.</b>
+      <p><a href="https://gauravide.vercel.app">Gauravide</a>, a receipt app where one 3.5‑hour session found and fixed 9 silent failures, like a £20 receipt reaching Splitwise as $20; screens for a regulated financial services platform at Vierra; and dense data dashboards at tCognition.</p>
+    </div>
+    <div class="stats">
+      <div class="stat"><strong>67</strong><span>receipt scans: 28 read automatically, 39 checked line by line, 0 unreadable (Gauravide)</span></div>
+      <div class="stat"><strong>30+</strong><span>screens and 8+ workflows for customers and admins on a regulated financial platform (Vierra)</span></div>
+      <div class="stat"><strong>−30%</strong><span>offer drop-offs after shipping the MVP, with dense data dashboards (tCognition)</span></div>
+    </div>
+  </section>
+
+  <footer>Unofficial concept for SpendRule. Not affiliated with SpendRule. The health system, vendor, contract and numbers are made up. Not financial or legal advice.</footer>
+</div>
+
+<script>
+(function(){
+  /* Every dollar is computed here from the line items, in cents, so the page always adds up.
+     Invoice HMS-77105, 8 lines, total $29,605.00.
+     Line 3: 60 boxes billed $112.00, contract $96.00 -> $960.00 over.
+     Line 6: 800 sets billed $11.90, Tier 2 contract price $11.25 (5,400 sets bought this year, past 5,000) -> $520.00 over.
+     Line 8: not in the contract, $1,120.00, no contract price.
+     Clean lines (1, 2, 4, 5, 7) = $12,245.00. With 3 and 6 disputed and 8 held: 12,245 + 16,240 + 1,120 = 29,605. */
+  var L=[
+    {k:"L1",n:1,item:"Nitrile exam gloves, box of 100",unit:"box",q:400,bill:840,ctr:840,cl:"Exhibit A"},
+    {k:"L2",n:2,item:"IV start kits",unit:"kit",q:1200,bill:315,ctr:315,cl:"Exhibit A"},
+    {k:"L3",n:3,item:"Absorbable suture 3‑0, box of 36",unit:"box",q:60,bill:11200,ctr:9600,flag:"Flagged",why:"Rate above contract",cl:"§3.2 Fixed prices",
+      text:['Prices in Exhibit A are fixed through June 30, 2027. ','Absorbable suture 3‑0, box of 36: $96.00.'],po:"60 boxes at $96.00",rcv:"60 boxes"},
+    {k:"L4",n:4,item:"Exam table paper",unit:"roll",q:300,bill:620,ctr:620,cl:"Exhibit A"},
+    {k:"L5",n:5,item:"Foam dressing 4×4, box of 10",unit:"box",q:50,bill:4150,ctr:4150,auto:"Billed per box; contract prices each ($4.15). 50 boxes = 500 each, no variance after conversion.",cl:"Exhibit A"},
+    {k:"L6",n:6,item:"Infusion pump sets",unit:"set",q:800,bill:1190,ctr:1125,flag:"Flagged",why:"Volume discount missing",cl:"§4.2 Tier pricing",
+      text:['After 5,000 sets in a contract year, ','the price drops to the Tier 2 price of $11.25 a set.'],po:"800 sets at $11.90",rcv:"800 sets",ytd:"5,400 sets bought this contract year"},
+    {k:"L7",n:7,item:"Sharps containers, 2 gal",unit:"each",q:150,bill:780,ctr:780,cl:"Exhibit A"},
+    {k:"L8",n:8,item:"Hemostatic gauze",unit:"pack",q:40,bill:2800,ctr:null,flag:"Warning",why:"Not in the contract",cl:"Not in Exhibit A",po:"Not ordered",rcv:"40 packs"}
+  ];
+  L.forEach(function(x){x.amt=x.q*x.bill; x.cv=x.ctr==null?null:x.q*x.ctr; x.over=x.cv==null?0:x.amt-x.cv});
+  var FL=L.filter(function(x){return x.flag});
+  var CLEAN=L.filter(function(x){return !x.flag});
+  function sum(a,f){return a.reduce(function(s,x){return s+f(x)},0)}
+  var TOTAL=sum(L,function(x){return x.amt});
+  function $(c){var neg=c<0;c=Math.abs(c);return (neg?"−":"")+"$"+(Math.floor(c/100)).toLocaleString("en-US")+"."+String(c%100).padStart(2,"0")}
+  function e(s){return String(s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
+  function line(k){return L.filter(function(x){return x.k===k})[0]}
+  function fresh(){return {step:1,sel:"L3",view:"flag",flag:"L3",dec:{},hist:[],drafted:false,released:false,traced:false}}
+  var st=fresh();
+  var main=document.getElementById("main");
+
+  /* a decision is wrong when it approves a line billed above the contract */
+  function wrongs(){return FL.filter(function(x){return st.dec[x.k]==="approve"&&x.over>0})}
+  function decided(){return FL.filter(function(x){return st.dec[x.k]})}
+  function inGroup(g){return L.filter(function(x){return x.flag?st.dec[x.k]===g:g==="approve"})}
+  function money(){
+    var ap=inGroup("approve"),di=inGroup("dispute"),ho=inGroup("hold"),un=FL.filter(function(x){return !st.dec[x.k]});
+    return {ap:ap,di:di,ho:ho,un:un,U:sum(un,function(x){return x.amt}),A:sum(ap,function(x){return x.amt}),D:sum(di,function(x){return x.amt}),H:sum(ho,function(x){return x.amt}),
+      OV:sum(di,function(x){return x.over}),UNP:sum(di.concat(ho),function(x){return x.over}),DC:sum(di,function(x){return x.cv})};
+  }
+  function ready(){return decided().length===FL.length&&!wrongs().length}
+  function status(x){
+    var d=st.dec[x.k];
+    if(d==="approve")return x.over>0?'<span class="pill bad">Approved, breaks '+e(x.cl.split(" ")[0])+'</span>':'<span class="pill ok">Approved</span>';
+    if(d==="dispute")return '<span class="pill info">Disputed</span>';
+    if(d==="hold")return '<span class="pill warn">Held</span>';
+    if(x.flag)return '<span class="pill '+(x.flag==="Flagged"?"bad":"warn")+'">'+x.flag+'</span>';
+    if(x.auto)return '<span class="pill ok">Auto-resolved</span>';
+    return '<span class="pill off">Matches</span>';
+  }
+  function row(x){
+    return '<button type="button" class="row" data-sel="'+x.k+'"'+(x.k===st.sel?' aria-current="true"':'')+'><span class="ln">'+x.n+'</span><span class="it"><b>'+e(x.item)+'</b><small>'+x.q.toLocaleString("en-US")+' × '+$(x.bill)+(x.flag?' · '+e(x.why):'')+'</small></span><span class="st">'+status(x)+'</span><span class="amt">'+$(x.amt)+'</span></button>';
+  }
+  function peek(){
+    var x=line(st.sel), h="";
+    if(x.flag&&x.cv!=null){
+      h+='<div class="peek"><span class="cap">Line '+x.n+' · '+e(x.cl)+'</span><h3>'+e(x.item)+': billed '+$(x.bill)+', contract says '+$(x.ctr)+'</h3>';
+      h+='<div class="vs"><div><span>Billed</span><strong>'+$(x.amt)+'</strong></div><div><span>Contract</span><strong>'+$(x.cv)+'</strong></div><div class="over"><span>Over</span><strong>'+$(x.over)+'</strong></div></div>';
+      h+='<div class="btns"><button type="button" class="btn primary" data-trace="'+x.k+'">Trace to the contract</button></div></div>';
+    }else if(x.flag){
+      h+='<div class="peek warn"><span class="cap">Line '+x.n+' · '+e(x.cl)+'</span><h3>'+e(x.item)+' has no contract price to check against</h3><p>'+$(x.amt)+' billed. It is not on the purchase order either.</p><div class="btns"><button type="button" class="btn primary" data-trace="'+x.k+'">Trace to the contract</button></div></div>';
+    }else{
+      h+='<div class="peek ok"><span class="cap">Line '+x.n+' · '+e(x.cl)+'</span><h3>'+e(x.item)+' matches the contract</h3><p>'+(x.auto?e(x.auto):x.q.toLocaleString("en-US")+' × '+$(x.ctr)+' = '+$(x.amt)+', same as billed.')+'</p></div>';
+    }
+    return h;
+  }
+  function step1(){
+    var h="", show=st.view==="flag"?FL:L;
+    h+='<div class="title"><div><h2>3 lines don\'t match the contract</h2><p>Invoice HMS-77105 · 8 lines · '+$(TOTAL)+' · PO 20931</p></div><span class="pill '+(ready()?"ok":"bad")+'">'+(FL.length-decided().length)+' to decide</span></div>';
+    h+='<div class="seg" role="group" aria-label="Show"><button type="button" data-view="flag" aria-pressed="'+(st.view==="flag")+'">Flagged ('+FL.length+')</button><button type="button" data-view="all" aria-pressed="'+(st.view==="all")+'">All lines ('+L.length+')</button></div>';
+    h+='<div class="lines">'+show.map(row).join("");
+    if(st.view==="flag")h+='<div class="foot"><span>'+CLEAN.length+' more lines match the contract, 1 after a unit conversion</span><button type="button" class="linkbtn" data-view="all">Show all</button></div>';
+    else h+='<div class="foot"><span>Invoice total</span><b>'+$(TOTAL)+'</b></div>';
+    h+='</div>';
+    h+=peek();
+    return h;
+  }
+  function step2(){
+    var x=line(st.flag), d=st.dec[x.k], h="";
+    h+='<div class="title"><div><h2>Line '+x.n+': '+e(x.item)+'</h2><p>Traced from the invoice to the contract.</p></div>'+status(x)+'</div>';
+    h+='<div class="ftabs" role="group" aria-label="Flagged lines">'+FL.map(function(f){var dd=st.dec[f.k],c=!dd?"":(dd==="approve"&&f.over>0)?"":dd==="hold"?"warn":"ok";return '<button type="button" class="ftab" data-flag="'+f.k+'"'+(f.k===st.flag?' aria-current="true"':'')+'><i class="'+c+'"></i>Line '+f.n+(dd?'<span class="sr"> (decided)</span>':'')+'</button>'}).join("")+'</div>';
+    var noC=x.cv==null;
+    h+='<div class="chain">'+
+      '<div class="link'+(noC?"":" bad")+'"><span class="cap"><span>Invoice</span>'+(noC?'':'<i class="m n">✕</i>')+'</span><strong>'+x.q.toLocaleString("en-US")+' × '+$(x.bill)+'</strong><small>'+$(x.amt)+'</small></div>'+
+      '<div class="link'+(noC?" warn":"")+'"><span class="cap"><span>Purchase order</span><i class="m '+(noC?"n":"y")+'">'+(noC?"✕":"✓")+'</i></span><strong>'+e(x.po)+'</strong><small>PO 20931</small></div>'+
+      '<div class="link"><span class="cap"><span>Received</span><i class="m y">✓</i></span><strong>'+e(x.rcv)+'</strong><small>Dock receipt, Nov 3</small></div>'+
+      '<div class="link'+(noC?" warn":"")+'"><span class="cap"><span>Contract</span>'+(noC?'<i class="m n">✕</i>':'<i class="m y">✓</i>')+'</span><strong>'+(noC?"No price":x.q.toLocaleString("en-US")+' × '+$(x.ctr))+'</strong><small>'+(noC?"Not in Exhibit A":$(x.cv))+'</small></div></div>';
+    if(noC){
+      h+='<div class="clause none"><span class="cap">Supply agreement · Exhibit A</span><p>This item is not in the contract, so there is no price to check and no clause to cite.</p></div>';
+    }else{
+      h+='<div class="clause"><span class="cap">Supply agreement · '+e(x.cl)+'</span><q>'+e(x.text[0])+'<mark>'+e(x.text[1])+'</mark></q>'+(x.ytd?'<span class="more">'+e(x.ytd)+'.</span>':'')+'</div>';
+      h+='<p class="math"><span>'+x.q.toLocaleString("en-US")+' × ('+$(x.bill)+' − '+$(x.ctr)+')</span> <span>= <b>'+$(x.over)+' over contract</b></span></p>';
+    }
+    var opts=[
+      {id:"approve",t:"Approve as billed",s:"Pay "+$(x.amt)},
+      {id:"dispute",t:noC?"Dispute":"Dispute "+$(x.over),s:noC?"No clause to cite":"Send the clause to Halvern",off:noC},
+      {id:"hold",t:"Hold",s:noC?"Ask the buyer if it was ordered":"Keep it out of this payment"}
+    ];
+    h+='<div class="ask"><h3>What should happen to line '+x.n+'?</h3><div class="decs" role="group" aria-label="Decision">'+opts.map(function(o){return '<button type="button" class="dec'+(o.id==="approve"&&x.over>0?" wrongpick":"")+'" data-dec="'+o.id+'" aria-pressed="'+(d===o.id)+'"'+(o.off?" disabled":"")+'><b>'+o.t+'</b><small>'+o.s+'</small></button>'}).join("")+'</div></div>';
+    if(d==="approve"&&x.over>0)h+='<p class="wrong">This pays '+$(x.over)+' more than '+e(x.cl.split(" ")[0])+' allows. Undo it, then dispute or hold.</p>';
+    var next=FL.filter(function(f){return !st.dec[f.k]&&f.k!==x.k})[0];
+    h+='<div class="btns"><button type="button" class="btn" data-undo="1"'+(st.hist.length?"":" disabled")+'>Undo</button>'+
+      (next?'<button type="button" class="btn'+(d&&!(d==="approve"&&x.over>0)?" primary":"")+'" data-flag="'+next.k+'">Next flag: line '+next.n+'</button>':'<button type="button" class="btn primary" data-go="3"'+(ready()?"":" disabled")+'>Release payment</button>')+'</div>';
+    return h;
+  }
+  function note(m){
+    if(!m.di.length)return '<div class="note"><div class="nh"><b>Dispute note</b><span class="pill off">Nothing disputed</span></div><div class="nb"><p>No line was disputed, so there is nothing to send.</p></div></div>';
+    var n=CLEAN.length+m.ap.filter(function(x){return x.flag}).length;
+    var h='<div class="note"><div class="nh"><b>Dispute note to Halvern Medical Supply</b><span class="pill info">Built from '+m.di.length+' disputed line'+(m.di.length>1?"s":"")+'</span></div><div class="nb">';
+    h+='<p>Re: Invoice HMS-77105, PO 20931</p><p>We are paying the '+n+' lines we approved ('+$(m.A)+') today. We are disputing:</p><ul>';
+    h+=m.di.map(function(x){return '<li>Line '+x.n+', '+e(x.item)+': billed '+$(x.bill)+', '+e(x.cl.split(" ")[0])+' says '+$(x.ctr)+'. '+x.q.toLocaleString("en-US")+' × '+$(x.bill-x.ctr)+' = '+$(x.over)+' over.</li>'}).join("");
+    h+='</ul><p>Please send a credit of '+$(m.OV)+' or a corrected invoice. We will pay '+(m.di.length>1?"these lines":"this line")+' at the contract price ('+$(m.DC)+') when it arrives.</p><p>Talia Brooks, Accounts payable, Mesa Ridge Health</p></div></div>';
+    return h;
+  }
+  function step3(){
+    var h="", m=money(), w=wrongs(), left=FL.length-decided().length;
+    if(st.released){
+      h+='<div class="title"><div><h2>Payment released</h2><p>Invoice HMS-77105 · '+$(TOTAL)+' billed</p></div><span class="pill ok">Released</span></div>';
+      h+='<div class="res"><h3>'+$(m.A)+' sent to payment</h3><p>'+m.ap.length+' approved lines. '+$(m.UNP)+' billed over contract was never paid.</p></div>';
+      h+=split(m);
+      h+='<div class="btns"><button type="button" class="btn" data-unrel="1">Undo release</button></div>';
+      return h;
+    }
+    h+='<div class="title"><div><h2>Release clean lines</h2><p>Only lines that match the contract go to payment.</p></div><span class="pill '+(ready()?"ok":"bad")+'">'+(ready()?"Ready":"Not ready")+'</span></div>';
+    if(left){h+='<div class="empty">'+left+' flagged line'+(left>1?"s":"")+' still need'+(left>1?"":"s")+' a decision. <button type="button" class="linkbtn" data-go="2">Trace them</button></div>';}
+    if(w.length){h+='<div class="block"><b>Line '+w.map(function(x){return x.n}).join(" and ")+' is approved but breaks the contract.</b><span>Paying it would send '+$(sum(w,function(x){return x.over}))+' more than the contract allows. <button type="button" class="linkbtn" data-flag="'+w[0].k+'">Fix line '+w[0].n+'</button></span></div>';}
+    h+=split(m);
+    if(st.drafted)h+=note(m);
+    h+='<div class="btns">'+(st.drafted?'':'<button type="button" class="btn" data-draft="1"'+(ready()?"":" disabled")+'>Draft dispute note</button>')+
+      '<button type="button" class="btn primary" data-release="1"'+(ready()&&st.drafted?"":" disabled")+'>Release '+$(m.A)+'</button></div>';
+    return h;
+  }
+  function split(m){
+    return '<div class="split"><div class="pay"><span>To pay now · '+m.ap.length+' lines</span><strong>'+$(m.A)+'</strong></div><div><span>Disputed · '+m.di.length+' line'+(m.di.length===1?"":"s")+'</span><strong>'+$(m.D)+'</strong></div><div><span>Held · '+m.ho.length+' line'+(m.ho.length===1?"":"s")+'</span><strong>'+$(m.H)+'</strong></div>'+(m.un.length?'<div class="und"><span>Not decided · '+m.un.length+' line'+(m.un.length===1?"":"s")+'</span><strong>'+$(m.U)+'</strong></div>':'')+'</div>'+
+      '<p class="eq"><span>'+$(m.A)+' +</span> <span>'+$(m.D)+' +</span> <span>'+$(m.H)+'</span>'+(m.un.length?' <span>+ '+$(m.U)+'</span>':'')+' <span>= <b>'+$(m.A+m.D+m.H+m.U)+'</b></span> <span>invoice total</span></p>';
+  }
+  function side(){
+    var w=wrongs().length, n=decided().length, c=[st.traced,n===FL.length&&!w,st.drafted,st.released], dn=c.filter(Boolean).length;
+    document.getElementById("cnt").textContent=dn;
+    document.getElementById("bar").style.width=(dn/4*100)+"%";
+    function r(cls,t,s){return '<div><i class="'+cls+'"></i><span><b>'+t+'</b><span>'+s+'</span></span></div>'}
+    var m=money();
+    document.getElementById("checks").innerHTML=
+      r(st.traced?"ok":"warn","Lines checked",st.traced?L.length+" of "+L.length+" traced to the contract":CLEAN.length+" of "+L.length+" match; "+FL.length+" flagged")+
+      r(w?"bad":n===FL.length?"ok":n?"warn":"","Flags resolved",w?w+" approval breaks the contract":n+" of "+FL.length+" decided")+
+      r(st.drafted?"ok":"","Dispute drafted",st.drafted?(m.di.length?$(m.OV)+" asked back":"Nothing to dispute"):"Not yet")+
+      r(st.released?"ok":"","Payment released",st.released?$(m.A)+" paid":"Not yet");
+  }
+  function guide(){
+    var t="",nx="",s=st.step,bad=false,w=wrongs(),x=line(st.flag),m=money();
+    if(w.length&&s!==1){bad=true;var ww=w[0];t='<b>That approval breaks the contract.</b> <span>Line '+ww.n+' would pay '+$(ww.over)+' more than '+e(ww.cl.split(" ")[0])+' allows.</span>';nx=st.hist.length&&s===2?'<button type="button" class="btn" data-undo="1">Undo</button>':'<button type="button" class="btn" data-flag="'+ww.k+'">Fix line '+ww.n+'</button>'}
+    else if(s===1){
+      if(st.view==="all"){t='<b>5 of 8 lines match the contract.</b> <span>Line 5 matched after converting boxes to single units.</span>';nx='<button type="button" class="btn primary" data-trace="L3">Next: trace line 3 →</button>'}
+      else{t='<b>Talia Brooks pays supply invoices at Mesa Ridge Health.</b> <span>Line 3 looks fine on the invoice, but the contract price is '+$(line("L3").ctr)+', not '+$(line("L3").bill)+'.</span>';nx='<button type="button" class="btn" data-trace="L3">Try: trace line 3</button>'}
+    }else if(s===2){
+      var n=decided().length;
+      if(n===FL.length){t='<b>All 3 flags decided.</b> <span>Only clean lines will go to payment.</span>';nx='<button type="button" class="btn primary" data-go="3">Next: release payment →</button>'}
+      else if(!st.dec[x.k]){t='<b>The clause sits beside the price.</b> <span>'+(x.cv==null?'Line 8 has no contract price, so it can\'t be disputed.':'Line '+x.n+' is '+$(x.over)+' over '+e(x.cl.split(" ")[0])+'.')+'</span>';nx='<span class="hint">'+(x.over>0&&!st.hist.length?'Try: approve it as billed':'Try: pick a decision')+'</span>'}
+      else{var nf=FL.filter(function(f){return !st.dec[f.k]})[0];t='<b>Line '+x.n+' '+({dispute:"disputed",hold:"held",approve:"approved"})[st.dec[x.k]]+'.</b> <span>'+(FL.length-n)+' flag'+(FL.length-n>1?"s":"")+' left.</span>';nx='<button type="button" class="btn" data-flag="'+nf.k+'">Next: line '+nf.n+'</button>'}
+    }else if(st.released){
+      t='<b>Paid only what the contract says.</b> <span>'+$(m.UNP)+' billed over contract was never paid.</span>';nx='<button type="button" class="btn" data-reset="1">Replay the story</button>';
+    }else if(!ready()){
+      t='<b>Nothing is paid until every flag has a decision.</b> <span>'+(FL.length-decided().length)+' still open.</span>';nx='<button type="button" class="btn" data-go="2">Go to the flags</button>';
+    }else if(!st.drafted){
+      t='<b>The dispute note uses only the lines Talia disputed.</b> <span>Each one quotes its clause.</span>';nx='<span class="hint">Try: draft the dispute note</span>';
+    }else{
+      t='<b>'+$(m.A)+' goes to payment.</b> <span>'+$(m.D)+' waits for Halvern\'s credit and '+$(m.H)+' waits for the buyer.</span>';nx='<span class="hint">Try: release clean lines</span>';
+    }
+    var g=document.getElementById("guide");
+    g.className="guide"+(bad?" bad":"");
+    g.innerHTML='<span class="tag">Story '+s+' / 3</span><p>'+t+'</p>'+nx;
+  }
+  function render(){
+    var dn=[st.traced,decided().length===FL.length&&!wrongs().length,st.released], Lb=["Flagged lines","Trace one","Release payment"];
+    ["s1","s2","s3"].forEach(function(id,i){var b=document.getElementById(id);
+      if(i+1===st.step)b.setAttribute("aria-current","step");else b.removeAttribute("aria-current");
+      b.innerHTML=(dn[i]&&i+1!==st.step?'<span class="tick" aria-hidden="true">✓</span>':'<span>'+(i+1)+'</span>')+'<span>'+Lb[i]+'</span>'+(dn[i]?'<span class="sr"> (done)</span>':'')});
+    main.innerHTML=st.step===1?step1():st.step===2?step2():step3();
+    side(); guide();
+  }
+  document.addEventListener("click",function(ev){
+    var b=ev.target.closest("button"); if(!b||b.disabled)return;
+    var d=b.dataset;
+    if(d.go){st.step=+d.go; if(st.step===2)st.traced=true}
+    if(d.view){st.view=d.view}
+    if(d.sel){st.sel=d.sel; if(line(d.sel).flag)st.flag=d.sel}
+    if(d.trace){st.flag=d.trace; st.sel=d.trace; st.step=2; st.traced=true}
+    if(d.flag){st.flag=d.flag; st.sel=d.flag; st.step=2; st.traced=true}
+    if(d.dec){st.hist.push(JSON.stringify(st.dec)); if(st.dec[st.flag]===d.dec)delete st.dec[st.flag]; else st.dec[st.flag]=d.dec; st.drafted=false; st.released=false}
+    if(d.undo){var h=st.hist.pop(); if(h)st.dec=JSON.parse(h); st.drafted=false; st.released=false}
+    if(d.draft){st.drafted=true}
+    if(d.release){st.released=true}
+    if(d.unrel){st.released=false}
+    if(d.reset){st=fresh()}
+    render();
+  });
+  render();
+})();
+</script>
+
+</body>
+</html>
